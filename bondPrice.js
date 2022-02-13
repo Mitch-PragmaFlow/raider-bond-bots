@@ -4,33 +4,13 @@ const useAlchemy = require("./lib/useAlchemy");
 const CoinGecko = require("coingecko-api");
 const CR_BOND_ABI = require("./lib/contracts/crbond_abi.json");
 const CR_SLP_ABI = require("./lib/contracts/cr_slp_abi.json");
+const bots = require("bots.js");
 
-function getBondPrice(_bond) {
+
+async function getBondPrice() {
+
+  var discount = 0;
   const DECIMALS = 100000000000000000;
-  
-  // Number formatting
-  const PRETTY_NUMBER = Intl.NumberFormat("en-US");
-  const PRETTY_CURRENCY = Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
-
-  const PRETTY_PERCENT = Intl.NumberFormat("en-US", {
-    style: "percent",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-  // State to hold the various values required for the calculation
-  const [trueBondPrice, setTrueBondPrice] = useState(0);
-  const [maticPrice, setMaticPrice] = useState(0);
-  const [raiderPrice, setRaiderPrice] = useState(0);
-  const [slpTotalSupply, setSlpTotalSupply] = useState(0);
-  const [slpMaticReserves, setSlpMaticReserves] = useState(0);
-  const [slpRaiderReserves, setSlpRaiderReserves] = useState(0);
-  const [slpPrice, setSlpPrice] = useState(0);
-  const [bondPrice, setBondPrice] = useState(0);
-  const [roi, setRoi] = useState(0);
   
   // Use Alchmemy for interacting with the smart contracts
   const { useContract } = useAlchemy(process.env.alchemyKey);
@@ -47,48 +27,40 @@ function getBondPrice(_bond) {
   const CoinGeckoClient = new CoinGecko();
 
   // The main calculation
-  const refreshBondPrice = async () => {
-    const getTrueBondPrice = bondContract.methods.trueBondPrice().call();
-    const getSlpTotalSupply = slpContract.methods.totalSupply().call();
-    const getSlpReserves = slpContract.methods.getReserves().call();
-    const getCoinPrices = CoinGeckoClient.simple.price({
-      ids: ["crypto-raiders", "matic-network"],
-      vs_currencies: ["usd"],
+  const getTrueBondPrice = bondContract.methods.trueBondPrice().call();
+  const getSlpTotalSupply = slpContract.methods.totalSupply().call();
+  const getSlpReserves = slpContract.methods.getReserves().call();
+  
+  const getCoinPrices = CoinGeckoClient.simple.price({
+    ids: ["crypto-raiders", "matic-network"],
+    vs_currencies: ["usd"],
   });
-    
-    // Fetch everything in parallel.
-    const results = await Promise.all([
-      getTrueBondPrice,
-      getCoinPrices,
-      getSlpTotalSupply,
-      getSlpReserves,
-    ]);
+  
+  // Fetch everything in parallel.
+  const results = await Promise.all([
+    getTrueBondPrice,
+    getCoinPrices,
+    getSlpTotalSupply,
+    getSlpReserves,
+  ]);
 
-    const trueBondPrice = results[0] / 10000000;
-    setTrueBondPrice(trueBondPrice);
-    const maticPrice = results[1].data["matic-network"]["usd"];
-    setMaticPrice(maticPrice);
-    const raiderPrice = results[1].data["crypto-raiders"]["usd"];
-    setRaiderPrice(raiderPrice);
-    const slpTotalSupply = Number(results[2]) / DECIMALS;
-    setSlpTotalSupply(slpTotalSupply);
-    const slpMaticReserves = Number(results[3]["0"] / DECIMALS);
-    setSlpMaticReserves(slpMaticReserves);
-    const slpRaiderReserves = Number(results[3]["1"] / DECIMALS);
-    setSlpRaiderReserves(slpRaiderReserves);
-    const slpValue =
-      slpMaticReserves * maticPrice + slpRaiderReserves * raiderPrice;
-    const slpPrice = slpValue / slpTotalSupply;
-    setSlpPrice(slpPrice);
-    const bondPrice = slpPrice * trueBondPrice;
-    setBondPrice(bondPrice);
-    const roi = raiderPrice / bondPrice - 1;
-    setRoi(roi);
+  const trueBondPrice = results[0] / 10000000;
+  const maticPrice = results[1].data["matic-network"]["usd"];
+  const raiderPrice = results[1].data["crypto-raiders"]["usd"];
+  const slpTotalSupply = Number(results[2]) / DECIMALS;
+  const slpMaticReserves = Number(results[3]["0"] / DECIMALS);
+  const slpRaiderReserves = Number(results[3]["1"] / DECIMALS);
+  const slpValue =
+    slpMaticReserves * maticPrice + slpRaiderReserves * raiderPrice;
+  const slpPrice = slpValue / slpTotalSupply;
+  const bondPrice = slpPrice * trueBondPrice;
+  discount = raiderPrice / bondPrice - 1;
 
+  console.log("discount: ", discount);
+  
+  return {bondPrice, discount};
 
-    console.log(roi);
-    return(roi)
-  }
+  
 }
 
 module.exports = getBondPrice;
